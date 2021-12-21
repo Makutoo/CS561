@@ -1,0 +1,152 @@
+/*Report 1*/
+
+With A as (
+	Select cust, prod, month, state, avg(quant) as cust_avg
+	From sales 
+	Group by sales.cust, sales.prod, sales.month, sales.state
+	),
+	
+	B as (
+	Select s1.cust, s1.prod, s1.month, s1.state, avg(s2.quant) as OTHER_PROD_AVG
+	From sales as s1, sales as s2
+	where s1.cust = s2.cust and s1.state = s2.state and s1.month = s2.month and s1.prod != s2.prod
+	group by s1.cust, s1.prod, s1.month, s1.state
+	order by s1.cust, s1.prod, s1.month, s1.state),
+	
+	C as (
+	Select s1.cust, s1.prod, s1.month, s1.state, avg(s2.quant) as OTHER_MONTH_AVG
+	From sales as s1, sales as s2
+	where s1.cust = s2.cust and s1.prod = s2.prod and s1.state = s2.state and s1.month != s2.month
+	group by s1.cust, s1.prod, s1.month, s1.state
+	order by s1.cust, s1.prod, s1.month, s1.state),
+	
+	D as (
+	Select s1.cust, s1.prod, s1.month, s1.state, avg(s2.quant) as OTHER_STATE_AVG
+	From sales as s1, sales as s2
+	where s1.cust = s2.cust and s1.prod = s2.prod and s1.month = s2.month and s1.state != s2.state
+	group by s1.cust, s1.prod, s1.month, s1.state
+	order by s1.cust, s1.prod, s1.month, s1.state),
+	
+	E as (
+	Select A.cust, A.prod, A.month, A.state,A.cust_avg, B.OTHER_PROD_AVG
+	From A,B
+	where A.cust = B.cust and A.prod = B.prod and A.month = B.month and A.state = B.state),
+	
+	F as (
+	Select C.cust, C.prod, C.month, C.state, C.OTHER_MONTH_AVG, D.OTHER_STATE_AVG
+	From C,D
+	where C.cust = D.cust and C.prod = D.prod and C.month = D.month and C.state = D.state),
+	
+	report as (
+	Select E.cust, E.prod, E.month, E.state, E.cust_avg, E.OTHER_PROD_AVG, F.OTHER_MONTH_AVG, F.OTHER_STATE_AVG
+	From E,F
+	where E.cust = F.cust and E.prod = F.prod and E.month = F.month and E.state = F.state
+	order by E.cust, E.prod, E.month, E.state)
+	
+	SELECT * FROM REPORT
+
+
+/*report 2*/
+
+ALTER TABLE sales ADD Column IF NOT EXISTS Q integer;
+Update sales set Q = 1 where month between 1 and 3;
+Update sales set Q = 2 where month between 4 and 6;
+Update sales set Q = 3 where month between 7 and 9;
+Update sales set Q = 4 where month between 10 and 12;
+
+with 
+	A as(select cust, prod,state, Q, avg(quant) as cur_avg_Quant
+	From sales 
+	group by cust, prod,state, Q),
+	
+	D as (
+	select b.cust, b.prod, b.state,
+	b.q as curQuarter, B.cur_avg_Quant, C.q as BeforeQuarter, C.cur_avg_Quant as before_avg_Quant
+	From A as B LEFT  OUTER  JOIN A as C
+	on B.cust = C.cust and B.prod = C.prod and B.state = C.state and b.q - 1 = c.q),
+	
+	E as (
+	select b.cust, b.prod, b.state,
+	b.q as curQuarter, B.cur_avg_Quant, C.q as BeforeQuarter, C.cur_avg_Quant as after_avg_Quant
+	From A as B LEFT  OUTER  JOIN A as C
+	on B.cust = C.cust and B.prod = C.prod and B.state = C.state and b.q + 1 = c.q),
+	
+	F as (
+	select cust, prod, state, curQuarter, before_avg_Quant
+	from d),
+	
+	G as (
+	select cust, prod, state, curQuarter, after_avg_Quant
+	from e)
+	
+	select F.cust as CUSTOMER, F.prod as PRODUCT, F.state as STATE, 
+	F.curQuarter as Q1, F.before_avg_Quant as BEFORE_AVG, G.after_avg_Quant as AFTER_AVG
+	from F join G 
+	on F.cust = G.cust and F.prod = G.prod and F.state = G.state and F.curQuarter = G.curQuarter
+	order by CUSTOMER, PRODUCT, STATE, Q1;
+
+
+/*report 3*/
+
+
+With 
+	productAndUniqueQ as (
+	Select distinct prod , quant  from sales order by prod, quant),
+
+	smallAndEqual as (
+	Select S1.PROD as product, S1.QUANT as quantity, S2.QUANT as quant_smaller_equal
+	From productAndUniqueQ as s1 join sales as s2 on s1.quant >= s2.quant and s1.prod = s2.prod order by s1.prod, s1.quant),
+	
+	greaterAndEqual as (
+	Select S1.PROD as product, S1.QUANT as quantity, S2.QUANT as quant_greater_equal
+	From productAndUniqueQ as s1 join Sales as s2 on s1.quant <= s2.quant and s1.prod = s2.prod order by s1.prod, s1.quant),
+	
+	count_samller_Equal as (
+	select product, quantity, count(quant_smaller_equal) as number_of_samllerOrEqual from smallAndEqual group by product, quantity order by product, quantity),
+
+	count_greater_Equal as (
+	select product, quantity, count(quant_greater_equal) as number_of_greaterOrEqual from greaterAndEqual group by product, quantity order by product, quantity),
+
+	MedianReport as (
+	Select count_samller_Equal.product, count_samller_Equal.quantity, number_of_samllerOrEqual, number_of_greaterOrEqual 
+	from count_samller_Equal join count_greater_Equal 
+	on count_samller_Equal.product = count_greater_Equal.product 
+	and count_samller_Equal.quantity = count_greater_Equal.quantity
+	and (count_samller_Equal.number_of_samllerOrEqual = count_greater_Equal.number_of_greaterOrEqual
+	or count_samller_Equal.number_of_samllerOrEqual+1 = count_greater_Equal.number_of_greaterOrEqual
+	or count_samller_Equal.number_of_samllerOrEqual = count_greater_Equal.number_of_greaterOrEqual +1))
+
+Select product, avg(quantity)as MEDIAN_QUANT from MedianReport group by product
+
+
+/* report 4*/
+		
+With A as (
+	select cust, prod, month, sum(quant) as sum_quant
+	From sales 
+	group by cust, prod,month
+	order by cust, prod,month),
+	
+	B as (
+	Select a1.cust, a1.prod, a1.month,sum(a2.sum_quant) as acc_quant
+	From a as a1 join a as a2 
+	on a1.cust = a2.cust and a1.prod = a2.prod and  a1.month >= a2.month
+	group by a1.cust, a1.prod, a1.month),
+	
+	C as (
+	Select cust, prod, sum(quant) * 0.75 as seventy_five_precent_quant
+	From sales 
+	Group by cust, prod
+	order by cust, prod),
+	
+	D as (
+	Select B.cust, B.prod, B.month, B.acc_quant, C.seventy_five_precent_quant
+	From B join C 
+	on B.cust = C.cust and B.prod = C.prod and B.acc_quant >= C.seventy_five_precent_quant),
+	
+	E as (
+	Select D.cust, D.prod, min(month) as seventy_five_precent_month
+	From D
+	Group by D.cust, D.prod)
+	
+	Select * from e

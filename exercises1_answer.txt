@@ -1,0 +1,154 @@
+/* Report #1: */
+SELECT A.cust as CUSTOMER, 
+A.MIN_Q, b.prod as MIN_PROD,
+B.date as MIN_DATE, b.state as ST,
+A.MAX_Q, c.prod as MAX_PROD, 
+C.date as MAX_DATE, c.state as ST,
+A.AVG_Q 
+FROM
+(select cust, MIN(QUANT) as MIN_Q, MAX(QUANT) as MAX_Q, AVG(QUANT) as AVG_Q
+from sales 
+GROUP BY CUST) as A
+INNER JOIN SALES as B ON A.MIN_Q = B.QUANT AND A.CUST = B.CUST
+INNER JOIN SALES as C On A.MAX_Q = C.QUANT AND A.CUST = C.CUST;
+
+
+/* Report #2: */
+SELECT 
+OCT_REPORT.customer, OCT_REPORT.product, OCT_REPORT.OCT_MAX, OCT_REPORT.OCT_DATE, 
+NOV_REPORT.NOV_MIN, NOV_REPORT.NOV_DATE,
+DEC_REPORT.DEC_MIN, DEC_REPORT.DEC_DATE
+
+From
+(SELECT A.CUST as customer, A.PROD as product, A.OCT_MAX as OCT_MAX, B.date as OCT_DATE 
+ FROM
+(SELECT cust, prod, max(quant) AS OCT_MAX from sales where month = 10 and year > 2017 group by cust, prod) AS A
+INNER JOIN 
+(SELECT * FROM SALES WHERE month = 10 and year > 2017) as B 
+ON A.cust = B.cust and A.prod = B.prod and A.OCT_MAX = B.quant) AS OCT_REPORT
+
+inner join 
+
+(SELECT A.CUST as customer, A.NOV_MIN as NOV_MIN, B.prod as product, B.date as NOV_DATE 
+ FROM
+(SELECT cust, prod, min(quant) AS NOV_MIN from sales where month = 11 group by cust, prod) AS A
+INNER JOIN 
+ (SELECT *FROM SALES WHERE month = 11) as B ON A.cust = B.cust and A.NOV_MIN = B.QUANT and A.prod = B.prod) AS NOV_REPORT
+on OCT_REPORT.product = NOV_REPORT.product and OCT_REPORT.customer = NOV_REPORT.customer
+
+inner join 
+
+(SELECT A.CUST as customer, A.DEC_MIN as DEC_MIN, B.prod as product, B.date as DEC_DATE 
+ FROM
+(SELECT cust, prod, min(quant) AS DEC_MIN from sales where month = 12 group by cust, prod) AS A
+INNER JOIN 
+ (SELECT *FROM SALES WHERE month = 12) as B ON A.cust = B.cust and A.DEC_MIN = B.QUANT and A.prod = B.prod) AS DEC_REPORT
+
+on OCT_REPORT.customer = DEC_REPORT.CUSTOMER and OCT_REPORT.product = DEC_REPORT.product
+order by OCT_REPORT.customer, OCT_REPORT.product
+
+
+/* Report #3: */
+Select Most_popular_report.month, Most_popular_Prod, most_pop_total_q, Least_popular_Prod, Least_pop_total_q
+From 
+(Select C.month, B.prod as Most_popular_Prod, C.max as most_pop_total_q from
+(Select  A.month, max(sum) 
+from 
+(SELECT prod, month, sum(quant) from sales group by prod, month) as A
+group by month order by A.month) as C
+
+inner join 
+
+(SELECT prod, month, sum(quant) from sales group by prod, month) as B
+on C.month = B.month and C.max = B.sum order by C.month) as Most_popular_report
+
+inner join
+
+(Select C.month, B.prod as Least_popular_Prod, C.min as Least_pop_total_q from
+(Select  A.month, min(sum) 
+from 
+(SELECT prod, month, sum(quant) from sales group by prod, month) as A
+group by month order by A.month) as C
+
+inner join 
+
+(SELECT prod, month, sum(quant) from sales group by prod, month) as B
+on C.month = B.month and C.min = B.sum order by C.month) as Least_popular_report
+
+on Most_popular_report.month = Least_popular_report.month order by month;
+
+
+/* Report #4: */
+SELECT MOST_FAV_REPORT.prod, MOST_FAV_MO, LEAST_FAV_MO
+from 
+(Select C.prod, B.month as MOST_FAV_MO 
+from
+(Select A.prod, max(sum) from 
+(Select prod, month, sum(quant) from sales group by prod, month order by prod, month) as A
+group by A.prod) as C
+
+inner join
+
+(Select prod, month, sum(quant) from sales group by prod, month order by prod, month) as B
+
+on C.prod = B.prod and C.max = B.sum) as MOST_FAV_REPORT
+
+inner join
+
+(Select C.prod, B.month as LEAST_FAV_MO 
+from
+(Select A.prod, min(sum) from 
+(Select prod, month, sum(quant) from sales group by prod, month order by prod, month) as A
+group by A.prod) as C
+
+inner join
+
+(Select prod, month, sum(quant) from sales group by prod, month order by prod, month) as B
+
+on C.prod = B.prod and C.min = B.sum) as LEAST_FAV_REPORT
+
+on MOST_FAV_REPORT.prod = LEAST_FAV_REPORT.prod;
+
+
+
+/* Report #5: */
+Select Product, customer, CT_AVG, NY_AVG, NJ_AVG, PA_AVG, average, total, count
+from
+(SELECT CT_report.prod as Product, CT_report.cust as customer, CT_average_sales_quantities as CT_AVG,
+NY_average_sales_quantities as NY_AVG,
+NJ_average_sales_quantities as NJ_AVG,
+PA_average_sales_quantities as PA_AVG
+from
+(select prod, cust, avg(quant) as CT_average_sales_quantities
+from sales 
+where year between 2016 and 2020 and state = 'CT' group by prod, cust order by cust, prod) as CT_report
+
+inner join
+
+(select prod, cust, avg(quant) as NY_average_sales_quantities
+from sales 
+where year between 2016 and 2020 and state = 'NY' group by prod, cust order by cust, prod) as NY_report
+
+on CT_report.cust = NY_report.cust and CT_report.prod = NY_report.prod
+
+inner join
+
+(select prod, cust, avg(quant) as NJ_average_sales_quantities
+from sales 
+where year between 2016 and 2020 and state = 'NJ' group by prod, cust order by cust, prod) as NJ_report
+
+on CT_report.cust = NJ_report.cust and CT_report.prod = NJ_report.prod
+
+inner join
+
+(select prod, cust, avg(quant) as PA_average_sales_quantities
+from sales 
+where year between 2016 and 2020 and state = 'PA' group by prod, cust order by cust, prod) as PA_report
+
+on CT_report.cust = PA_report.cust and CT_report.prod = PA_report.prod) as State_avg_report
+
+inner join 
+
+(Select prod, cust,avg(quant) as average, sum(quant) as total, count(quant) as count from sales group by prod, cust) as avg_report
+
+on State_avg_report.product = avg_report.prod and State_avg_report.customer = avg_report.cust
